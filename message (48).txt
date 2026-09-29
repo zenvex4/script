@@ -64,7 +64,7 @@ local PlaceId, JobId = game.PlaceId, game.JobId
 
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui", 999)
 
-local Config = {BootDelay=15, HopEnabled=true, MinPlayers=1, MaxPlayers=9, BaseTimeout=20.0, TargetIDs={["eclipseonyx"]=true, ["eclipseonyxgem"]=true, ["eclipseonyxore"]=true, ["onyx"]=true, ["onyxore"]=true, ["onyxgem"]=true}}
+local Config = {BootDelay=7, HopEnabled=true, MinPlayers=1, MaxPlayers=9, BaseTimeout=20.0, TargetIDs={["eclipseonyx"]=true, ["eclipseonyxgem"]=true, ["eclipseonyxore"]=true, ["onyx"]=true, ["onyxore"]=true, ["onyxgem"]=true}}
 local State = {IsBooting=true, BootTimer=Config.BootDelay, OnyxCount=0, NoOnyxTimer=0, TotalHops=0, InMiningZone=false, IsHopping=false, CurrentJitter=3.0, TargetPart=nil, TargetId=nil, CachedAutoBtn=nil, IsAutoFarmOn=false}
 
 local ScreenGui = Instance.new("ScreenGui")
