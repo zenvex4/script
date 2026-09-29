@@ -1,0 +1,445 @@
+while not game:IsLoaded() do
+    task.wait(1)
+end
+
+task.wait(1)
+
+local player = game.Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local root = character:WaitForChild("HumanoidRootPart")
+
+local PortalPosition = Vector3.new(180.92327880859375, 17.237337112426758, -140.77337646484375)
+local MinePosition = CFrame.new(27606.806640625, 16.6431827545166, -8104.4482421875)
+
+root.CFrame = CFrame.new(PortalPosition)
+
+local portalTeleported = false
+local waitStart = os.clock()
+local maxPortalWait = 60
+
+while os.clock() - waitStart < maxPortalWait do
+    task.wait(0.1)
+
+    character = player.Character or character
+    root = character:FindFirstChild("HumanoidRootPart")
+
+    if root then
+        local movedFarEnough = (root.Position - PortalPosition).Magnitude > 100
+        local miningWorldLoaded = workspace:FindFirstChild("__THINGS") ~= nil
+
+        if movedFarEnough or miningWorldLoaded then
+            portalTeleported = true
+            break
+        end
+    end
+end
+
+task.wait(5)
+
+local secondTeleportStart = os.clock()
+while os.clock() - secondTeleportStart < 5 do
+    character = player.Character or character
+    root = character and character:FindFirstChild("HumanoidRootPart")
+
+    if root then
+        pcall(function()
+            root.CFrame = MinePosition
+        end)
+    end
+
+    task.wait(0.1)
+end
+
+pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 end)
+
+local Players = game:GetService("Players")
+local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
+local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local GuiService = game:GetService("GuiService")
+local LocalPlayer = Players.LocalPlayer
+local PlaceId, JobId = game.PlaceId, game.JobId
+
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui", 999)
+
+local Config = {BootDelay=15, HopEnabled=true, MinPlayers=1, MaxPlayers=9, BaseTimeout=20.0, TargetIDs={["eclipseonyx"]=true, ["eclipseonyxgem"]=true, ["eclipseonyxore"]=true, ["onyx"]=true, ["onyxore"]=true, ["onyxgem"]=true}}
+local State = {IsBooting=true, BootTimer=Config.BootDelay, OnyxCount=0, NoOnyxTimer=0, TotalHops=0, InMiningZone=false, IsHopping=false, CurrentJitter=3.0, TargetPart=nil, TargetId=nil, CachedAutoBtn=nil, IsAutoFarmOn=false}
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name, ScreenGui.ResetOnSpawn = "OnyxScannerMobile", false
+local s, hui = pcall(function() return gethui() end)
+ScreenGui.Parent = s and hui or PlayerGui
+
+local MainFrame = Instance.new("Frame", ScreenGui)
+MainFrame.Size, MainFrame.Position = UDim2.new(0, 240, 0, 220), UDim2.new(0.02, 0, 0.15, 0)
+MainFrame.BackgroundColor3, MainFrame.BackgroundTransparency, MainFrame.BorderSizePixel = Color3.fromRGB(0, 0, 0), 0.20, 0
+MainFrame.Active, MainFrame.Draggable = true, true
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 8)
+
+local TitleLabel = Instance.new("TextLabel", MainFrame)
+TitleLabel.Size, TitleLabel.Position = UDim2.new(1, -20, 0, 24), UDim2.new(0, 10, 0, 8)
+TitleLabel.BackgroundTransparency, TitleLabel.Text = 1, "Vy Onyx Hunter"
+TitleLabel.TextColor3, TitleLabel.TextSize = Color3.fromRGB(240, 240, 245), 18
+TitleLabel.Font, TitleLabel.TextXAlignment = Enum.Font.SourceSansBold, Enum.TextXAlignment.Left
+
+local StatusLabel = Instance.new("TextLabel", MainFrame)
+StatusLabel.Size, StatusLabel.Position = UDim2.new(1, -20, 0, 22), UDim2.new(0, 10, 0, 34)
+StatusLabel.BackgroundTransparency, StatusLabel.Text = 1, string.format("booting %ds...", Config.BootDelay)
+StatusLabel.TextColor3, StatusLabel.TextSize = Color3.fromRGB(255, 200, 50), 13
+StatusLabel.Font, StatusLabel.TextXAlignment = Enum.Font.SourceSansBold, Enum.TextXAlignment.Left
+
+local InfoBox = Instance.new("TextLabel", MainFrame)
+InfoBox.Size, InfoBox.Position = UDim2.new(1, -20, 0, 60), UDim2.new(0, 10, 0, 60)
+InfoBox.BackgroundTransparency, InfoBox.Text = 1, "zone: booting  onyx: 0\nhops: 0\nstatus: waiting boot"
+InfoBox.TextColor3, InfoBox.TextSize = Color3.fromRGB(160, 160, 175), 12
+InfoBox.Font, InfoBox.TextXAlignment, InfoBox.TextYAlignment = Enum.Font.Code, Enum.TextXAlignment.Left, Enum.TextYAlignment.Top
+
+local HopButton = Instance.new("TextButton", MainFrame)
+HopButton.Size, HopButton.Position = UDim2.new(0.5, -15, 0, 32), UDim2.new(0, 10, 1, -80)
+HopButton.BackgroundColor3, HopButton.Text = Color3.fromRGB(245, 80, 100), "HOP NOW"
+HopButton.TextColor3, HopButton.TextSize = Color3.fromRGB(255, 255, 255), 13
+HopButton.Font = Enum.Font.SourceSansBold
+Instance.new("UICorner", HopButton).CornerRadius = UDim.new(0, 6)
+
+local AutoHopBtn = Instance.new("TextButton", MainFrame)
+AutoHopBtn.Size, AutoHopBtn.Position = UDim2.new(0.5, -15, 0, 32), UDim2.new(0.5, 5, 1, -80)
+AutoHopBtn.BackgroundColor3, AutoHopBtn.Text = Color3.fromRGB(80, 200, 100), "AUTO: ON"
+AutoHopBtn.TextColor3, AutoHopBtn.TextSize = Color3.fromRGB(255, 255, 255), 13
+AutoHopBtn.Font = Enum.Font.SourceSansBold
+Instance.new("UICorner", AutoHopBtn).CornerRadius = UDim.new(0, 6)
+
+local ForceUIBtn = Instance.new("TextButton", MainFrame)
+ForceUIBtn.Size, ForceUIBtn.Position = UDim2.new(1, -20, 0, 32), UDim2.new(0, 10, 1, -40)
+ForceUIBtn.BackgroundColor3, ForceUIBtn.Text = Color3.fromRGB(150, 50, 255), "Force Auto Mining"
+ForceUIBtn.TextColor3, ForceUIBtn.TextSize = Color3.fromRGB(255, 255, 255), 13
+ForceUIBtn.Font = Enum.Font.SourceSansBold
+Instance.new("UICorner", ForceUIBtn).CornerRadius = UDim.new(0, 6)
+
+AutoHopBtn.MouseButton1Click:Connect(function()
+    Config.HopEnabled = not Config.HopEnabled
+    if Config.HopEnabled then
+        AutoHopBtn.Text, AutoHopBtn.BackgroundColor3 = "AUTO: ON", Color3.fromRGB(80, 200, 100)
+    else
+        AutoHopBtn.Text, AutoHopBtn.BackgroundColor3 = "AUTO: OFF", Color3.fromRGB(200, 80, 80)
+    end
+end)
+
+-- Reliable Server Hopping Function with API Check & Queue Rotation
+local function HopServer()
+    if State.IsHopping then return end
+    State.IsHopping = true
+    StatusLabel.Text, StatusLabel.TextColor3 = "Finding Server...", Color3.fromRGB(180, 120, 255)
+    
+    task.spawn(function()
+        local httpreq = (request or http_request or syn and syn.request)
+        local vServers = {}
+        local cursor = ""
+        local successFound = false
+        
+        for i = 1, 3 do
+            local url = string.format("https://games.roblox.com/v1/games/%s/servers/Public?sortOrder=Asc&limit=100%s", tostring(PlaceId), cursor ~= "" and "&cursor=" .. cursor or "")
+            
+            local s, r = pcall(function()
+                if httpreq then 
+                    local res = httpreq({Url=url, Method="GET"})
+                    return HttpService:JSONDecode(res.Body)
+                else 
+                    return HttpService:JSONDecode(game:HttpGet(url)) 
+                end
+            end)
+
+            if s and r and r.data then
+                for _, srv in ipairs(r.data) do
+                    if type(srv) == "table" and srv.id ~= JobId and srv.playing and srv.playing >= Config.MinPlayers and srv.playing <= Config.MaxPlayers then
+                        table.insert(vServers, srv.id)
+                    end
+                end
+                
+                if r.nextPageCursor and #vServers == 0 then
+                    cursor = r.nextPageCursor
+                else
+                    break
+                end
+            else
+                break
+            end
+        end
+
+        if #vServers > 0 then
+            State.TotalHops = State.TotalHops + 1
+            StatusLabel.Text = "Teleporting to new server..."
+            
+            -- Shuffle to make sure it doesn't always pick index 1
+            local targetServerId = vServers[math.random(1, #vServers)]
+            
+            local tpSuccess = false
+            pcall(function()
+                TeleportService:TeleportToPlaceInstance(PlaceId, targetServerId, LocalPlayer)
+                tpSuccess = true
+            end)
+            
+            if tpSuccess then
+                task.wait(8)
+                State.IsHopping = false
+                return
+            end
+        end
+        
+        -- If HTTP request failed completely or instance teleport failed, 
+        -- use a Teleport queue fallback hook to force an alternate server pool join
+        State.TotalHops = State.TotalHops + 1
+        StatusLabel.Text = "Using alternative hop..."
+        
+        local ts = game:GetService("TeleportService")
+        pcall(function()
+            -- Teleport to a fresh server pool instance using reserved/alternative handles if supported, or standard teleport with a delay trick
+            ts:Teleport(PlaceId, LocalPlayer)
+        end)
+        
+        task.wait(5)
+        State.IsHopping = false
+    end)
+end
+
+HopButton.MouseButton1Click:Connect(HopServer)
+
+local function ForceClickAutoFarm(btnTarget)
+    if not btnTarget then return false end
+    local success = false
+    pcall(function()
+        if firesignal and btnTarget:IsA("GuiButton") then
+            pcall(function() firesignal(btnTarget.Activated) end)
+            success = true
+        elseif getconnections then
+            for _, conn in pairs(getconnections(btnTarget.Activated)) do 
+                pcall(function() conn:Fire() end) 
+                success = true 
+                break 
+            end
+            if not success then
+                for _, conn in pairs(getconnections(btnTarget.MouseButton1Click)) do 
+                    pcall(function() conn:Fire() end) 
+                    success = true 
+                    break 
+                end
+            end
+        end
+        
+        if not success then
+            local inset = GuiService:GetGuiInset()
+            local cx = btnTarget.AbsolutePosition.X + (btnTarget.AbsoluteSize.X / 2) + inset.X
+            local cy = btnTarget.AbsolutePosition.Y + (btnTarget.AbsoluteSize.Y / 2) + inset.Y
+            pcall(function() VirtualInputManager:SendTouchEvent(1, 0, cx, cy) end)
+            task.wait(0.05)
+            pcall(function() VirtualInputManager:SendTouchEvent(1, 1, cx, cy) end)
+        end
+    end)
+    return success
+end
+
+ForceUIBtn.MouseButton1Click:Connect(function()
+    if State.CachedAutoBtn then
+        ForceUIBtn.Text = "Forcing Auto Farm..."
+        ForceClickAutoFarm(State.CachedAutoBtn)
+        task.wait(0.5)
+        ForceUIBtn.Text = "Force Auto Mining"
+    else
+        ForceUIBtn.Text = "Button not found. Please wait..."
+        task.wait(1.5)
+        ForceUIBtn.Text = "Force Auto Mining"
+    end
+end)
+
+local function AnalyzeGameText(txt)
+    if type(txt) ~= "string" then return end
+    local t = string.lower(txt)
+    if string.find(t, "auto") and (string.find(t, "mine") or string.find(t, "farm")) then
+        if string.find(t, "enabled") or string.find(t, "on") then
+            State.IsAutoFarmOn = true
+        elseif string.find(t, "disabled") or string.find(t, "off") then
+            State.IsAutoFarmOn = false
+        end
+    end
+end
+
+task.spawn(function()
+    for _, v in pairs(PlayerGui:GetDescendants()) do
+        if v:IsA("TextLabel") or v:IsA("TextBox") then
+            AnalyzeGameText(v.Text)
+            v:GetPropertyChangedSignal("Text"):Connect(function() AnalyzeGameText(v.Text) end)
+        end
+    end
+    PlayerGui.DescendantAdded:Connect(function(v)
+        if v:IsA("TextLabel") or v:IsA("TextBox") then
+            task.delay(0.1, function() AnalyzeGameText(v.Text) end)
+            v:GetPropertyChangedSignal("Text"):Connect(function() AnalyzeGameText(v.Text) end)
+        end
+    end)
+end)
+
+local function CheckBlock(b)
+    if b:GetAttribute("Broken") or b:GetAttribute("Destroyed") then return false end
+    local hp = b:GetAttribute("Health") or b:GetAttribute("health") or b:GetAttribute("HP")
+    if hp ~= nil and tonumber(hp) <= 0 then return false end
+
+    local nameStr = string.lower(b.Name):gsub("[%s_%-]", "")
+    if string.find(nameStr, "onyx") or Config.TargetIDs[nameStr] then return true end
+
+    local isOnyx = false
+    for _, key in ipairs({"id", "Id", "ID", "Type"}) do
+        local val = b:GetAttribute(key)
+        if val then
+            local strVal = string.lower(tostring(val)):gsub("[%s_%-]", "")
+            if string.find(strVal, "onyx") or Config.TargetIDs[strVal] then 
+                isOnyx = true; break 
+            end
+        end
+    end
+
+    if not isOnyx then return false end
+    if (b:IsA("Model") or b:IsA("Folder")) and #b:GetChildren() == 0 then return false end
+    return true
+end
+
+local function UpdateMasterScanner()
+    local count = 0
+    local firstPart, firstId = nil, nil
+    local things = Workspace:FindFirstChild("__THINGS")
+    
+    if things then
+        State.InMiningZone = true
+        local function scanFolder(f)
+            for _, b in ipairs(f:GetDescendants()) do
+                if CheckBlock(b) then
+                    count = count + 1
+                    if not firstPart then
+                        firstPart = b:IsA("BasePart") and b or b:FindFirstChildWhichIsA("BasePart", true)
+                        firstId = b.Name
+                    end
+                end
+            end
+        end
+        local bw = things:FindFirstChild("BlockWorlds")
+        if bw then scanFolder(bw) end
+        local br = things:FindFirstChild("Breakables")
+        if br then
+            scanFolder(br)
+        end
+    else 
+        State.InMiningZone = false 
+    end
+    
+    State.OnyxCount = count
+    State.TargetPart = firstPart
+    State.TargetId = firstId
+end
+
+task.spawn(function()
+    while State.BootTimer > 0 do
+        StatusLabel.Text, StatusLabel.TextColor3 = string.format("booting %ds...", math.ceil(State.BootTimer)), Color3.fromRGB(255, 200, 50)
+        InfoBox.Text = string.format("zone: booting  onyx: 0\nhops: %d\nstatus: waiting boot", State.TotalHops)
+        task.wait(1)
+        State.BootTimer = State.BootTimer - 1
+    end
+    State.IsBooting, State.CurrentJitter = false, Config.BaseTimeout + (math.random(1, 15) / 10)
+    
+    while task.wait(0.5) do
+        UpdateMasterScanner()
+        if not State.InMiningZone then
+            State.NoOnyxTimer, StatusLabel.Text, StatusLabel.TextColor3 = 0, "Waiting for mining area...", Color3.fromRGB(255, 200, 50)
+        elseif State.OnyxCount > 0 then
+            State.NoOnyxTimer, State.CurrentJitter = 0, Config.BaseTimeout + (math.random(1, 15) / 10)
+            StatusLabel.Text, StatusLabel.TextColor3 = string.format("Onyx detected (%d)", State.OnyxCount), Color3.fromRGB(50, 220, 100)
+        else
+            State.NoOnyxTimer = State.NoOnyxTimer + 0.5
+            StatusLabel.Text, StatusLabel.TextColor3 = "No Onyx detected - hopping...", Color3.fromRGB(245, 180, 50)
+            if Config.HopEnabled and not State.IsHopping then
+                HopServer()
+            end
+        end
+        InfoBox.Text = string.format("zone: %s  onyx: %d\nhops: %d\nstatus: %s", State.InMiningZone and "yes" or "no", State.OnyxCount, State.TotalHops, (not Config.HopEnabled) and "AUTO HOP OFF" or (State.NoOnyxTimer > 0 and "hopping soon..." or "active"))
+    end
+end)
+
+task.spawn(function()
+    while State.IsBooting do task.wait(1) end
+    task.wait(0.5) 
+    
+    State.IsAutoFarmOn = false 
+    
+    while task.wait(0.5) do
+        if Config.HopEnabled and not State.IsHopping then
+            if not State.CachedAutoBtn or not State.CachedAutoBtn.Parent then
+                pcall(function()
+                    for _, v in pairs(PlayerGui:GetDescendants()) do
+                        if v:IsA("GuiButton") or v:IsA("ImageButton") or v:IsA("TextButton") then
+                            local name = string.lower(v.Name)
+                            local pName = v.Parent and string.lower(v.Parent.Name) or ""
+                            if string.find(name, "autofarm") or string.find(pName, "autofarm") 
+                            or string.find(name, "automine") or string.find(pName, "automine") then
+                                State.CachedAutoBtn = v
+                                break
+                            end
+                        end
+                    end
+                end)
+            end
+
+            if State.CachedAutoBtn and State.CachedAutoBtn.Parent then
+                if not State.IsAutoFarmOn then
+                    TitleLabel.Text = "Vy: Auto Mine Activated!"
+                    TitleLabel.TextColor3 = Color3.fromRGB(255, 150, 50)
+                    ForceClickAutoFarm(State.CachedAutoBtn)
+                else
+                    if TitleLabel.Text ~= "Vy Onyx Hunter" then
+                        TitleLabel.Text = "Vy Onyx Hunter"
+                        TitleLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
+                    end
+                end
+            end
+        end
+    end
+end)
+
+task.spawn(function()
+    local Network = ReplicatedStorage:WaitForChild("Network", 5)
+
+    task.spawn(function()
+        while task.wait(0.5) do
+            pcall(function()
+                if Config.HopEnabled and not State.IsHopping and not State.IsBooting then
+                    local character = LocalPlayer.Character
+                    if character and character:FindFirstChild("HumanoidRootPart") and State.TargetPart then
+                        local hrp = character.HumanoidRootPart
+                        local targetPos = State.TargetPart.CFrame * CFrame.new(0, 6, 0)
+                        if (hrp.Position - targetPos.Position).Magnitude > 6 then 
+                            hrp.CFrame = targetPos 
+                        end
+                    end
+                end
+            end)
+        end
+    end)
+
+    task.spawn(function()
+        while task.wait(0.1) do
+            pcall(function()
+                if Config.HopEnabled and not State.IsHopping and not State.IsBooting and Network and State.TargetId then
+                    local dealDamage = Network:FindFirstChild("Breakables_PlayerDealDamage")
+                    if dealDamage then
+                        if dealDamage:IsA("RemoteEvent") then dealDamage:FireServer(State.TargetId)
+                        elseif dealDamage:IsA("RemoteFunction") then dealDamage:InvokeServer(State.TargetId) end
+                    end
+                    
+                    local join = Network:FindFirstChild("Breakables_Join")
+                    if join then
+                        if join:IsA("RemoteEvent") then join:FireServer(State.TargetId)
+                        elseif join:IsA("RemoteFunction") then join:InvokeServer(State.TargetId) end
+                    end
+                end
+            end)
+        end
+    end)
+end)
